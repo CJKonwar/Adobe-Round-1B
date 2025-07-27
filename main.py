@@ -2,8 +2,9 @@ import os
 import json
 from documentIntellligence import DocumentIntelligence
 
-INPUT_JSON = "/app/challenge1b_input.json"  
-INPUT_DIR = "/app/Input"
+INPUT_JSON = "/app/input.json"  
+INPUT_DIR = "/app/input"
+OUTPUT_DIR = "/app/output"
 
 def get_output_filename(input_json):
     if input_json.endswith('_input.json'):
@@ -15,17 +16,16 @@ def get_output_filename(input_json):
         return "analysis_output.json"
 
 def main():
-    
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+
     with open(INPUT_JSON, "r") as f:
         config = json.load(f)
 
+    OUTPUT_FILENAME = get_output_filename(os.path.basename(INPUT_JSON))
+    OUTPUT_PATH = os.path.join(OUTPUT_DIR, OUTPUT_FILENAME)
 
-    OUTPUT_PATH = get_output_filename(INPUT_JSON)
-
-   
     persona = config["persona"]["role"]
     job = config["job_to_be_done"]["task"]
-
 
     pdf_filenames = [doc["filename"] for doc in config["documents"]]
     pdf_files = [
@@ -47,7 +47,7 @@ def main():
         pdf_files=pdf_files,
         output_path=OUTPUT_PATH
     )
-    print(f"All results written to {OUTPUT_PATH}")
+    print(f"✅ All results written to {OUTPUT_PATH}")
 
 if __name__ == "__main__":
     main()
