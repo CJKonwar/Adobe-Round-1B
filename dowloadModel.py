@@ -1,5 +1,11 @@
 from sentence_transformers import SentenceTransformer
-model = SentenceTransformer('cross-encoder/ms-marco-MiniLM-L6-v2')
-model = SentenceTransformer('BAAI/bge-base-en-v1.5')
-model.save('cross-encoder/ms-marco-MiniLM-L6-v2')
-model.save('BAAI/bge-base-en-v1.5')
+
+print("Downloading bi-encoder model...")
+bi_model = SentenceTransformer('BAAI/bge-base-en-v1.5')
+bi_model.save('./models/BAAI/bge-base-en-v1.5')
+
+print("Downloading cross-encoder model...")
+ce_model = SentenceTransformer('cross-encoder/ms-marco-MiniLM-L6-v2')
+ce_model.save('./models/cross-encoder/ms-marco-MiniLM-L6-v2')
+
+print("All models downloaded successfully!")
