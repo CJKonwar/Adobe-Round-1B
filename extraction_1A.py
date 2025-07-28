@@ -6,6 +6,7 @@ import re
 import bisect
 import itertools
 from collections import defaultdict
+# fuzzy matching for header/footer detection
 from thefuzz import fuzz
 
 class SmartPDFOutline:
@@ -25,12 +26,13 @@ class SmartPDFOutline:
 
     @staticmethod
     def is_poster_doc(lines_by_page, max_spans=80, max_pages=2):
+         # lightweight mode for short documents or posters
         total_spans = sum(len(v) for v in lines_by_page.values())
         return total_spans <= max_spans or len(lines_by_page) <= max_pages
 
     @staticmethod
     def classify_poster(lines_by_page):
-        # For each y-position (row), concatenate horizontally, treat high font size as heading
+         # collapse text horizontally row-by-row; extract headings by font size and bold
         all_lines = [line for lines in lines_by_page.values() for line in lines]
         if not all_lines:
             return [], ""
@@ -71,7 +73,7 @@ class SmartPDFOutline:
             blocks = page.get_text("dict", flags=fitz.TEXT_PRESERVE_LIGATURES)["blocks"]
             for block in blocks:
                 if block["type"] != 0:
-                    continue
+                    continue   # skip images or non-text blocks
                 for line in block["lines"]:
                     spans = [s for s in line["spans"] if s["text"].strip()]
                     if not spans:
@@ -95,6 +97,7 @@ class SmartPDFOutline:
                     })
     
     def _identify_headers_and_footers(self, top_n=5, bottom_n=3, threshold=75, tol=10):
+        # fuzzy match repeated top/bottom lines across pages    
         pages = defaultdict(list)
         for line in self.lines:
             pages[line["page"]].append(line)
@@ -129,6 +132,7 @@ class SmartPDFOutline:
         return candidates
 
     def _compute_statistical_features(self):
+        # get typical font sizes (ignore big headings)
         sizes = [l["size"] for l in self.lines if l["size"] < 18]
         arr = np.array(sizes) if sizes else np.array([12])
         self.features = {
@@ -149,6 +153,7 @@ class SmartPDFOutline:
                 self.elements.append({**l, "cls": "HEADING"})
 
     def _bucket_headings_by_level(self, el):
+         # generalised heuristic to assign H1–H4 based on style
         size, bold, centered = el["size"], el["bold"], el["centeredness"]
         m, sd, md = (self.features[k] for k in ("mean_size", "std_dev_size", "median_size"))
         if size > m + 1.5 * sd and bold: return "H1"
@@ -158,17 +163,20 @@ class SmartPDFOutline:
         return "H4"
 
     def _assemble_final_outline(self):
+        # guess document title from first page's largest/longest heading
         page0 = [l for l in self.lines if l["page"] == 0]
         candidates = sorted(page0, key=lambda l: (l["size"], len(l["text"])), reverse=True)
         title = next((c["text"].strip() for c in candidates if len(c["text"]) > 5), "Untitled Document")
         title_set = {line["text"] for line in candidates[:2]}
         heads = [e for e in self.elements if e["text"] not in title_set]
 
+         # assign heading levels
         outline = []
         for h in heads:
             level = self._bucket_headings_by_level(h)
             outline.append({"level": level, "text": h["text"], "page": h["page"]})
 
+         # sort by page and level, remove duplicates
         order = {"H1": 1, "H2": 2, "H3": 3, "H4": 4}
         outline.sort(key=lambda x: (x["page"], order.get(x["level"], 99)))
         final = [next(g) for _, g in itertools.groupby(outline, key=lambda x: (x["text"], x["page"]))]
@@ -176,8 +184,8 @@ class SmartPDFOutline:
 
     def analyze(self):
         self._build_lines_with_features()
-        # --- Poster mode check ---
-        # Group lines by page for poster detection
+         
+        # Poster mode detection
         lines_by_page = defaultdict(list)
         for l in self.lines:
             lines_by_page[l["page"]].append(l)
@@ -188,7 +196,8 @@ class SmartPDFOutline:
                 # Try to assign level based on size (since poster mode is flat, everything H1)
                 outline.append({"level": el.get("level", "H1"), "text": el["text"], "page": el["page"]})
             return json.dumps({"title": title, "outline": outline}, indent=4)
-        # --- Standard path ---
+        
+        # Normal document mode
         headerfooters = self._identify_headers_and_footers()
         self.lines = [l for l in self.lines if (l["text"], int(l["bbox"].y0)) not in headerfooters]
         self._compute_statistical_features()
