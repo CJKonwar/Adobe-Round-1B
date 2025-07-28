@@ -47,7 +47,7 @@ def main():
         pdf_files=pdf_files,
         output_path=OUTPUT_PATH
     )
-    print(f"✅ All results written to {OUTPUT_PATH}")
+    print(f"All results written to {OUTPUT_PATH}")
 
 if __name__ == "__main__":
     main()
