@@ -1,6 +1,7 @@
 # Execution Instruction
 
-### - **approach_explanation.md CONTAINS THE METHODOLOGY OF OUR SOLUTION**
+**⭐ `approach_explanation.md` CONTAINS THE METHODOLOGY OF OUR SOLUTION ⭐**
+
 
 Docker Setup Instructions for Round 1B Solution
 
