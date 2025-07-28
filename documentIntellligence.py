@@ -87,7 +87,7 @@ class DocumentIntelligence:
             if len(c["text"].strip()) >= 50:
                 subsection_analysis.append({
                     "document": c["doc"],
-                    "refined_text": c["text"][:500],
+                    "refined_text": c["text"].strip(),
                     "page_number": c["page"]
                 })
 
@@ -104,25 +104,43 @@ class DocumentIntelligence:
         }
         with open(output_path, "w") as f:
             json.dump(output, f, indent=2)
-        print(f"✅ Analysis complete. Results saved to {output_path}")
+        print(f"Analysis complete. Results saved to {output_path}")
         return output
 
     def _extract_and_chunk_all(self, pdf_files):
-        """
-        For each PDF, extract headings (with SmartPDFOutline), then chunk the text.
-        """
+    
         chunks = []
         for pdf_path in pdf_files:
             doc_name = os.path.basename(pdf_path)
             extractor = SmartPDFOutline(pdf_path)
             outline = json.loads(extractor.analyze()).get("outline", [])
             doc = fitz.open(pdf_path)
-            # map page → first heading text
-            first_heading = {h["page"]: h["text"] for h in outline}
+            
+            # Create better heading mapping - prefer actual heading text over page numbers
+            page_headings = {}
+            for h in outline:
+                page_num = h["page"]
+                # Only use headings that are not generic page numbers
+                if not h["text"].startswith("Page") and h["text"].strip():
+                    if page_num not in page_headings:
+                        page_headings[page_num] = h["text"]
+            
             for page_idx in range(len(doc)):
                 text = doc[page_idx].get_text("text")
                 windows = self._token_windows(text, CHUNK_TOKENS, CHUNK_STRIDE)
-                heading = first_heading.get(page_idx, f"Page-{page_idx+1}")
+                
+                # Try to get a meaningful heading, fallback to first few words of text
+                if page_idx in page_headings:
+                    heading = page_headings[page_idx]
+                else:
+                    # Extract first meaningful line/sentence as heading
+                    text_lines = [line.strip() for line in text.split('\n') if line.strip()]
+                    if text_lines:
+                        # Use first substantial line as heading (limit to reasonable length)
+                        heading = text_lines[0][:60] + ("..." if len(text_lines[0]) > 60 else "")
+                    else:
+                        heading = f"Content from page {page_idx + 1}"
+                
                 for win in windows:
                     chunks.append({
                         "doc": doc_name,
@@ -138,10 +156,10 @@ class DocumentIntelligence:
         for c, e in zip(chunks, embs):
             c["emb"] = e
         return chunks
-
+    # Whitespace-based sliding windows of tokens.
     @staticmethod
     def _token_windows(text: str, window: int, stride: int):
-        """Whitespace-based sliding windows of tokens."""
+      
         words = text.split()
         if len(words) <= window:
             return [" ".join(words)]
@@ -153,9 +171,9 @@ class DocumentIntelligence:
             if i + window >= len(words):
                 break
         return out
-
+    # Maximum Marginal Relevance selection
     def _mmr_select(self, query_emb, cand_embs, cand_scores, mmr_lambda, top_k):
-        """Maximum Marginal Relevance selection."""
+
         cand_embs = np.vstack(cand_embs)
         sim = cand_embs @ cand_embs.T
         candidate_ids = list(range(len(cand_scores)))
@@ -175,9 +193,8 @@ class DocumentIntelligence:
             selected.append(best)
             candidate_ids.remove(best)
         return selected
-
+    # Used when there are no chunks/output to return.
     def _empty_output(self, err_msg: str, output_path: str):
-        """Used when there are no chunks/output to return."""
         output = {
             "metadata": {
                 "input_documents": getattr(self, 'documents', []),
@@ -191,5 +208,5 @@ class DocumentIntelligence:
         }
         with open(output_path, "w") as f:
             json.dump(output, f, indent=2)
-        print(f"⚠️ No output written: {err_msg}")
+        print(f"No output written: {err_msg}")
         return output
